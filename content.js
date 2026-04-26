@@ -28,8 +28,8 @@ container.innerHTML = `
         </div>
         <div class="sh-actions">
             <button class="sh-btn sh-btn-primary" id="sh-scan-form">Scan Form</button>
-            <button class="sh-btn" id="sh-auto-fill" style="background: #10b981">Auto Fill</button>
-            <button class="sh-btn" id="sh-scan-screen">Super Scan</button>
+            <button class="sh-btn" id="sh-auto-fill" style="background: #10b981">Auto Fill Form</button>
+            <button class="sh-btn" id="sh-scan-screen">Page Scan</button>
             <button class="sh-btn" id="sh-clear-all" style="background: rgba(255,255,255,0.1)">Clear</button>
         </div>
     </div>
@@ -81,35 +81,53 @@ document.onmouseup = () => isDragging = false;
 // Stealth Mode (Alt + X)
 document.addEventListener('keydown', (e) => {
     if (e.altKey && e.key.toLowerCase() === 'x') {
-        container.style.display = container.style.display === 'none' ? 'block' : 'none';
+        document.body.classList.toggle('sh-stealth');
     }
 });
 
-// Auto-Fill Logic (God Mode)
+// God Mode: Bulk Auto-Fill (Fast & Reliable)
 document.getElementById('sh-auto-fill').onclick = async () => {
-    statusDiv.innerText = 'God Mode: Filling Form...';
-    const items = Array.from(document.querySelectorAll('[role="listitem"]'));
+    statusDiv.innerHTML = '<span style="color: #10b981">🚀 Analyzing Form...</span>';
+    const items = Array.from(document.querySelectorAll('[role="listitem"], .geS54f'));
+    const questions = items.map((item, i) => `${i+1}: ${item.innerText.split('\n')[0]}`).join('\n');
     
-    for (const item of items) {
-        const questionText = item.innerText.split('\n')[0];
-        const result = await GeminiAPI.generateContent(await getApiKey(), `Give ONLY the exact text or option name for this question: ${questionText}`);
+    const prompt = `Solve these questions from a Google Form. Return ONLY a JSON object where keys are question numbers and values are the exact answer text or option name. Questions: \n${questions}`;
+    
+    try {
+        const rawResult = await GeminiAPI.generateContent(await getApiKey(), prompt);
+        const jsonMatch = rawResult.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) throw new Error("No JSON found");
+        const answers = JSON.parse(jsonMatch[0]);
         
-        // 1. Fill Text Inputs
-        const input = item.querySelector('input[type="text"], textarea');
-        if (input) {
-            input.value = result.trim();
-            input.dispatchEvent(new Event('input', { bubbles: true }));
-        }
-        
-        // 2. Click Radio Buttons (MCQs)
-        const options = Array.from(item.querySelectorAll('[role="radio"], [role="checkbox"]'));
-        for (const opt of options) {
-            if (opt.innerText.toLowerCase().includes(result.toLowerCase().trim())) {
-                opt.click();
+        items.forEach((item, i) => {
+            const answer = answers[i+1];
+            if (!answer) return;
+            
+            // Fill Text
+            const input = item.querySelector('input[type="text"], textarea');
+            if (input) {
+                input.value = answer;
+                input.dispatchEvent(new Event('input', { bubbles: true }));
             }
-        }
+            
+            // Click Radios/Checkboxes/Labels (Aggressive strategy)
+            const options = Array.from(item.querySelectorAll('[role="radio"], [role="checkbox"], .docssharedWizToggleLabeledLabelWrapper, label'));
+            options.forEach(opt => {
+                const optText = opt.innerText.toLowerCase().trim();
+                const cleanAnswer = answer.toLowerCase().trim();
+                
+                // Fuzzy Match: If the answer is inside the option, or vice-versa
+                if (optText.includes(cleanAnswer) || cleanAnswer.includes(optText)) {
+                    opt.click();
+                    // Double-click for safety on stubborn forms
+                    setTimeout(() => opt.click(), 100);
+                }
+            });
+        });
+        statusDiv.innerHTML = '<span style="color: #10b981">✅ Form Auto-Filled!</span>';
+    } catch (e) {
+        statusDiv.innerText = 'Auto-Fill Error. Use Scan Form instead.';
     }
-    statusDiv.innerText = 'Form Auto-Filled!';
 };
 
 
@@ -227,18 +245,19 @@ fileUpload.onchange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
     
-    statusDiv.innerText = `Attaching ${file.name}...`;
+    statusDiv.innerHTML = `<span style="color: #10b981">⚙️ Reading: ${file.name}...</span>`;
     
     const reader = new FileReader();
     reader.onload = (f) => {
         attachedFileData = f.target.result;
-        statusDiv.innerHTML = `<span class="sh-file-indicator">📎 Attached: ${file.name}</span>`;
+        statusDiv.innerHTML = `<div style="background: rgba(16, 185, 129, 0.2); padding: 5px; border-radius: 5px; color: #10b981; font-weight: bold; margin-top: 5px;">✅ ATTACHED: ${file.name}</div>`;
     };
     
     if (file.type.startsWith('image/')) {
         reader.readAsDataURL(file);
     } else {
-        reader.readAsText(file); // Handle PDF/TXT as text for now
+        // Read documents as UTF-8 to prevent "Boxes/Diamonds" error
+        reader.readAsText(file, "UTF-8");
     }
 };
 
@@ -273,6 +292,10 @@ chatInput.onkeypress = (e) => {
 function injectInlineButtons() {
     const questionBlocks = document.querySelectorAll('[role="listitem"]');
     questionBlocks.forEach(block => {
+        // Skip personal info fields like Nickname
+        if (block.innerText.toLowerCase().includes('nickname') || 
+            block.innerText.toLowerCase().includes('your name')) return;
+
         if (!block.querySelector('.sh-inline-btn')) {
             const btn = document.createElement('button');
             btn.className = 'sh-inline-btn';

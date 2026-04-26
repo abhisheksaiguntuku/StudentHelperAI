@@ -7,6 +7,12 @@
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
 }
 
+/* Stealth Mode: Hide EVERYTHING */
+body.sh-stealth #student-helper-container,
+body.sh-stealth .sh-inline-btn {
+    display: none !important;
+}
+
 .sh-floating-btn {
     width: 60px;
     height: 60px;
